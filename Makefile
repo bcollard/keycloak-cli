@@ -46,7 +46,6 @@ kcadm-login: ## Authenticate with Keycloak using credentials from environment va
 
 kcadm-get-realms: ## List all realms in Keycloak, parsed with jq and print only the realm names as a list
 	@docker exec -it $(KC_CONTAINER_NAME) ./kcadm.sh get realms --fields id,realm,enabled -h keycloak-kong=${KC_ADMIN_SECRET_HEADER}
-#  | jq '.[].realm'
 
 kcadm-create-realm: ## Create a new realm in Keycloak
 	@read -p "Enter new realm name: " NEW_REALM_NAME; \
