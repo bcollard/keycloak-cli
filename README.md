@@ -2,6 +2,10 @@
 
 Small helper project to run a Keycloak CLI container and manage realms/clients with `kcadm.sh` and `kcreg.sh` through `make` targets.
 
+Screenshot:
+
+![Make help screenshot](docs/img/screenshot-make.png)
+
 ## Prerequisites
 
 - Docker
@@ -28,14 +32,14 @@ The following variables are used by targets:
 - `VERSION` (default: `26.5`)
 - `IMAGE` (default: `ghcr.io/bcollard/keycloak-cli`)
 - `KC_CONTAINER_NAME` (default: `keycloak-cli`)
-- `KC_SERVER` (required for `kcadm-login`)
-- `KC_ADMIN_PASSWORD` (required for `kcadm-login`)
+- `KC_SERVER_HOSTNAME` (default: `keycloak.kong.runlocal.dev`)
+- `KC_ADMIN_PASSWORD` (required for `login`)
 - `KC_ADMIN_SECRET_HEADER` (used by admin endpoints)
 
 Example:
 
 ```bash
-export KC_SERVER="https://keycloak.kong.runlocal.dev"
+export KC_SERVER_HOSTNAME="keycloak.kong.runlocal.dev"
 export KC_ADMIN_PASSWORD="<admin-password>"
 export KC_ADMIN_SECRET_HEADER="<secret-header-value>"
 ```
@@ -68,13 +72,13 @@ make docker-cleanup
 ### Keycloak admin (`kcadm`)
 
 ```bash
-make kcadm-login
-make kcadm-get-realms
-make kcadm-create-realm
-make kcadm-new-client-initial-token
+make login
+make get-realms
+make create-realm
+make new-client-initial-token
 ```
 
-`kcadm-new-client-initial-token` prints only the raw token (clean output, no JSON quotes).
+`new-client-initial-token` prints only the raw token (clean output, no JSON quotes).
 
 ### Client registration (`kcreg`)
 
@@ -83,13 +87,13 @@ Use one of these flows:
 1) Prompt for an existing initial token:
 
 ```bash
-make kcreg-create-client-prompt-token
+make create-client-prompt-initial-token
 ```
 
 2) Generate initial token automatically, then create client:
 
 ```bash
-make kcreg-create-client-generate-initial-token
+make create-client-generate-initial-token
 ```
 
 ## Interactive client creation behavior
@@ -118,3 +122,9 @@ REALM_NAME="myrealm" INITIAL_TOKEN="<token>" KC_CONTAINER_NAME="keycloak-cli" ./
 ```
 
 If `INITIAL_TOKEN` is set, it is passed as `-t` to `kcreg.sh create`.
+
+The script also uses `KC_SERVER_HOSTNAME` to build the `--server` URL for `kcreg.sh`:
+
+```bash
+--server "https://$KC_SERVER_HOSTNAME"
+```

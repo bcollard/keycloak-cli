@@ -11,6 +11,7 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
+KC_SERVER_HOSTNAME="${KC_SERVER_HOSTNAME:-}"
 KC_CONTAINER_NAME="${KC_CONTAINER_NAME:-keycloak-cli}"
 INITIAL_TOKEN="${INITIAL_TOKEN:-}"
 
@@ -104,7 +105,7 @@ CREATE_PAYLOAD="$(jq -n \
     }
   }')"
 
-KCREG_CREATE_CMD=(docker exec -i "$KC_CONTAINER_NAME" ./kcreg.sh create --realm "$REALM_NAME" -o)
+KCREG_CREATE_CMD=(docker exec -i "$KC_CONTAINER_NAME" ./kcreg.sh create --realm "$REALM_NAME" --server "https://$KC_SERVER_HOSTNAME" -o)
 if [[ -n "$INITIAL_TOKEN" ]]; then
   KCREG_CREATE_CMD+=(-t "$INITIAL_TOKEN")
 fi

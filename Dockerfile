@@ -1,12 +1,13 @@
 # You can easily repackage Keycloak with a latest version by using this arg during the docker build
-ARG KEYCLOAK_VERSION=26.2
+ARG KEYCLOAK_VERSION=26.5
+ARG KC_SERVER_HOSTNAME=keycloak.kong.runlocal.dev
 
 # See https://www.keycloak.org/server/containers
 FROM quay.io/keycloak/keycloak:${KEYCLOAK_VERSION} AS builder
 
 WORKDIR /opt/keycloak
 
-ENV KC_HOSTNAME=keycloak.kong.runlocal.dev
+ENV KC_HOSTNAME=${KC_SERVER_HOSTNAME}
 ENV KC_HTTP_ENABLED=true
 ENV KC_PROXY_HEADERS=xforwarded
 
@@ -20,7 +21,7 @@ FROM quay.io/keycloak/keycloak:${KEYCLOAK_VERSION}
 COPY --from=builder /opt/keycloak/ /opt/keycloak/
 WORKDIR /opt/keycloak/bin
 
-ENV KC_HOSTNAME=keycloak.kong.runlocal.dev
+ENV KC_HOSTNAME=${KC_SERVER_HOSTNAME}
 ENV KC_HTTP_ENABLED=true
 ENV KC_PROXY_HEADERS=xforwarded
 
