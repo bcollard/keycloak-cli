@@ -24,6 +24,8 @@ brew install jq gum
 
 - `Dockerfile`: builds a Keycloak image with preview features enabled
 - `Makefile`: entrypoint for build/run/admin/registration commands
+- `scripts/kcadm-*.sh`: dedicated scripts for `kcadm.sh` operations
+- `scripts/kcadm-common.sh`: shared `kcadm` helper (conditionally appends admin header)
 - `scripts/kcreg-create-client.sh`: interactive client creation helper
 
 ## Configuration
@@ -34,16 +36,20 @@ The following variables are used by targets:
 - `IMAGE` (default: `ghcr.io/bcollard/keycloak-cli`)
 - `KC_CONTAINER_NAME` (default: `keycloak-cli`)
 - `KC_SERVER_HOSTNAME` (default: `keycloak.kong.runlocal.dev`)
-- `KC_ADMIN_PASSWORD` (required for `login`)
-- `KC_ADMIN_SECRET_HEADER` (used by admin endpoints)
+- `KC_ADMIN_PASSWORD` (required for `login`) - password for the `admin` user in the `master` realm, used to obtain an access token for admin operations
+- `KC_ADMIN_SECRET_HEADER` (used by admin endpoints) - extra header value required by my LB to protect KC admin endpoints
 
 Example:
 
 ```bash
-export KC_SERVER_HOSTNAME="keycloak.kong.runlocal.dev"
-export KC_ADMIN_PASSWORD="<admin-password>"
+export KC_SERVER_HOSTNAME="keycloak.kong.runlocal.dev" # the domain name your Keycloak instance is accessible at
+export KC_ADMIN_PASSWORD="<admin-password>"            # password for the `admin` user in the `master` realm
+# optional
 export KC_ADMIN_SECRET_HEADER="<secret-header-value>"
 ```
+
+When `KC_ADMIN_SECRET_HEADER` is set, admin scripts append `-h keycloak-kong=<value>` to `kcadm.sh` calls.
+When it is unset/empty, no extra header is added.
 
 ## Quick start
 
@@ -83,19 +89,11 @@ make new-client-initial-token
 
 ### Client registration (`kcreg`)
 
-Use one of these flows:
-
-1) Prompt for an existing initial token:
-
 ```bash
-make create-client-prompt-initial-token
+make create-client
 ```
 
-2) Generate initial token automatically, then create client:
-
-```bash
-make create-client-generate-initial-token
-```
+`create-client` prompts for both realm name and initial token, then launches the interactive `gum` flow picker.
 
 ## Interactive client creation behavior
 
