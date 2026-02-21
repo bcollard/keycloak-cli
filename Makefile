@@ -55,10 +55,10 @@ docker-cleanup: docker-stop ## Clean up Docker container
 login: ## Authenticate with Keycloak using admin credentials from environment variables
 	@KC_CONTAINER_NAME=$(KC_CONTAINER_NAME) KC_SERVER_HOSTNAME=$(KC_SERVER_HOSTNAME) KC_ADMIN_PASSWORD="${KC_ADMIN_PASSWORD}" ./scripts/kcadm-login.sh
 
-get-realms: ## List all realms in Keycloak, parsed with jq and print only the realm names as a list
+get-realms: login ## List all realms in Keycloak, parsed with jq and print only the realm names as a list
 	@KC_CONTAINER_NAME=$(KC_CONTAINER_NAME) KC_SERVER_HOSTNAME=$(KC_SERVER_HOSTNAME) KC_ADMIN_SECRET_HEADER="${KC_ADMIN_SECRET_HEADER}" ./scripts/kcadm-get-realms.sh
 
-create-realm: ## Create a new realm in Keycloak
+create-realm: login ## Create a new realm in Keycloak
 	@KC_CONTAINER_NAME=$(KC_CONTAINER_NAME) KC_SERVER_HOSTNAME=$(KC_SERVER_HOSTNAME) KC_ADMIN_SECRET_HEADER="${KC_ADMIN_SECRET_HEADER}" ./scripts/kcadm-create-realm.sh
 
 new-client-initial-token: login ## Generate a new initial access token for a realm
@@ -70,7 +70,5 @@ new-client-initial-token: login ## Generate a new initial access token for a rea
 ######################
 .PHONY: create-client
 create-client: ## Create a new client in Keycloak using kcreg (supports INITIAL_TOKEN and REALM_NAME env vars)
-	@read -p "Enter realm name: " REALM_NAME; \
-	 read -p "Enter initial token: " INITIAL_TOKEN; \
-	 REALM_NAME="$${REALM_NAME}" INITIAL_TOKEN="$${INITIAL_TOKEN}" KC_CONTAINER_NAME=$(KC_CONTAINER_NAME) KC_SERVER_HOSTNAME=$(KC_SERVER_HOSTNAME) ./scripts/kcreg-create-client.sh
+	@KC_CONTAINER_NAME=$(KC_CONTAINER_NAME) KC_SERVER_HOSTNAME=$(KC_SERVER_HOSTNAME) ./scripts/kcreg-create-client.sh
 

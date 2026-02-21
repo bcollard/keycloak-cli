@@ -15,10 +15,27 @@ KC_SERVER_HOSTNAME="${KC_SERVER_HOSTNAME:-}"
 KC_CONTAINER_NAME="${KC_CONTAINER_NAME:-keycloak-cli}"
 INITIAL_TOKEN="${INITIAL_TOKEN:-}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/container-common.sh"
+
+ensure_container_running "$KC_CONTAINER_NAME"
+
 REALM_NAME="${REALM_NAME:-}"
 if [[ -z "$REALM_NAME" ]]; then
   REALM_NAME="$(gum input --prompt "Realm name: " --placeholder "master")"
 fi
+
+if [[ -z "$INITIAL_TOKEN" ]]; then
+  INITIAL_TOKEN_RAW="$(gum write --placeholder "Paste initial token (JWT) then press Ctrl+D")"
+  INITIAL_TOKEN="$(printf '%s' "$INITIAL_TOKEN_RAW" | tr -d '[:space:]')"
+fi
+
+if [[ -z "$INITIAL_TOKEN" ]]; then
+  echo "Initial token is required."
+  echo "Generate one with: make new-client-initial-token"
+  exit 1
+fi
+
 CLIENT_ID="$(gum input --prompt "Client ID: " --placeholder "my_client")"
 CLIENT_NAME="$(gum input --prompt "Client name: " --value "$CLIENT_ID")"
 

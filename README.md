@@ -4,7 +4,7 @@ Small helper project to run a Keycloak CLI container and manage realms/clients w
 
 Demo:
 
-[![asciicast](https://asciinema.org/a/791844.svg)](https://asciinema.org/a/791844)
+[![asciicast](https://asciinema.org/a/791850.svg)](https://asciinema.org/a/791850)
 
 
 ## Prerequisites
