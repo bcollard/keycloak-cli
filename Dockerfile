@@ -4,6 +4,7 @@ ARG KC_SERVER_HOSTNAME=keycloak.kong.runlocal.dev
 
 # See https://www.keycloak.org/server/containers
 FROM quay.io/keycloak/keycloak:${KEYCLOAK_VERSION} AS builder
+ARG KC_SERVER_HOSTNAME
 
 WORKDIR /opt/keycloak
 
@@ -17,6 +18,7 @@ RUN /opt/keycloak/bin/kc.sh build --features=preview
 
 # From a java image
 FROM quay.io/keycloak/keycloak:${KEYCLOAK_VERSION}
+ARG KC_SERVER_HOSTNAME
 
 COPY --from=builder /opt/keycloak/ /opt/keycloak/
 WORKDIR /opt/keycloak/bin

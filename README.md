@@ -2,9 +2,10 @@
 
 Small helper project to run a Keycloak CLI container and manage realms/clients with `kcadm.sh` and `kcreg.sh` through `make` targets.
 
-Screenshot:
+Demo:
 
-![Make help screenshot](docs/img/screenshot-make.png)
+[![asciicast](https://asciinema.org/a/791844.svg)](https://asciinema.org/a/791844)
+
 
 ## Prerequisites
 

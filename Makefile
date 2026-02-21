@@ -22,7 +22,7 @@ help: ## Show this help message
 	 printf "$$DIM----------------------------------------------------------------------$$RESET\n"; \
 	 printf "$$BOLD$$YELLOW Lifecycle$$RESET $$DIM->$$RESET $$GREEN docker-run $$DIM/$$RESET$$GREEN docker-cleanup$$RESET\n"; \
 	 printf "$$BOLD$$YELLOW Realm Admin$$RESET $$DIM->$$RESET $$GREEN login $$DIM then$$RESET $$GREEN get-realms $$DIM/$$RESET$$GREEN create-realm $$DIM then$$RESET $$GREEN new-client-initial-token$$RESET\n"; \
-	 printf "$$BOLD$$YELLOW Client Reg$$RESET $$DIM->$$RESET $$GREEN create-client-prompt-initial-token $$DIM or$$RESET $$GREEN create-client-generate-initial-token$$RESET\n\n"; \
+	 printf "$$BOLD$$YELLOW Client Reg$$RESET $$DIM->$$RESET $$GREEN create-client$$RESET\n\n"; \
 	 printf "$$BOLD$$BLUE Available targets$$RESET\n"; \
 	 grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[1;36m%-36s\033[0m \033[2m%s\033[0m\n", $$1, $$2}'
 
@@ -70,19 +70,10 @@ new-client-initial-token: login ## Generate a new initial access token for a rea
 ######################
 # Client registration
 ######################
-.PHONY: create-client-prompt-initial-token create-client-generate-initial-token
+.PHONY: create-client
 
-create-client-prompt-initial-token: ## Create a new client in Keycloak using kcreg (supports INITIAL_TOKEN and REALM_NAME env vars)
+create-client: ## Create a new client in Keycloak using kcreg (supports INITIAL_TOKEN and REALM_NAME env vars)
 	@read -p "Enter realm name: " REALM_NAME; \
 	 read -p "Enter initial token: " INITIAL_TOKEN; \
 	 REALM_NAME="$${REALM_NAME}" INITIAL_TOKEN="$${INITIAL_TOKEN}" KC_CONTAINER_NAME=$(KC_CONTAINER_NAME) KC_SERVER_HOSTNAME=$(KC_SERVER_HOSTNAME) ./scripts/kcreg-create-client.sh
-
-create-client-generate-initial-token: ## Generate an initial token and use it for kcreg client creation
-	@read -p "Enter realm name: " REALM_NAME; \
-	 INITIAL_TOKEN="$$(docker exec -i $(KC_CONTAINER_NAME) ./kcadm.sh create clients-initial-access -r $${REALM_NAME} -h keycloak-kong=${KC_ADMIN_SECRET_HEADER} -s expiration=3600 -s count=15 -o | jq -r '.token' | tr -d '\r')"; \
-	 echo "Generated initial token: $${INITIAL_TOKEN}"; \
-	 REALM_NAME="$${REALM_NAME}" INITIAL_TOKEN="$${INITIAL_TOKEN}" KC_CONTAINER_NAME=$(KC_CONTAINER_NAME) KC_SERVER_HOSTNAME=$(KC_SERVER_HOSTNAME) ./scripts/kcreg-create-client.sh
-
-
-
 
