@@ -1,192 +1,184 @@
 # keycloak-cli
 
-Small helper project to run a Keycloak CLI container and manage realms, clients, users and groups with `kcadm.sh` and `kcreg.sh` through `make` targets.
+A portable Go CLI (`kc`) to manage Keycloak realms, users, groups and clients.
+No Docker. No Java. A single static binary.
 
 Demo:
 
 [![asciicast](https://asciinema.org/a/791850.svg)](https://asciinema.org/a/791850)
 
 
+## Install
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap bcollard/keycloak-cli
+brew install --cask keycloak-cli
+```
+
+### go install
+
+```bash
+go install github.com/bcollard/keycloak-cli@latest
+```
+
+### Download binary
+
+Grab the latest release from [GitHub Releases](https://github.com/bcollard/keycloak-cli/releases),
+extract the archive and move `kc` to somewhere on your `PATH`.
+
+### Build from source
+
+```bash
+git clone https://github.com/bcollard/keycloak-cli
+cd keycloak-cli
+make install        # builds ./kc and copies to /usr/local/bin
+```
+
+
 ## Prerequisites
 
-- Docker
-- GNU Make
-- `jq`
-- `gum` (for interactive prompts and multi-select UI)
+- `kc` binary (see Install above)
+- A running Keycloak instance reachable over HTTPS
 
-Install missing CLI tools on macOS:
-
-```bash
-brew install jq gum
-```
-
-## Project layout
-
-- `Dockerfile`: builds a Keycloak image with preview features enabled
-- `Makefile`: entrypoint for build/run/admin/registration commands
-- `scripts/kcadm-common.sh`: shared `kcadm` helper (conditionally appends admin header)
-- `scripts/container-common.sh`: shared Docker container check helper
-- `scripts/kcadm-login.sh`: authenticate with Keycloak
-- `scripts/kcadm-get-realms.sh`: list realms
-- `scripts/kcadm-create-realm.sh`: create a realm
-- `scripts/kcadm-delete-realm.sh`: interactive multi-select realm deletion
-- `scripts/kcadm-get-users.sh`: list users with group memberships
-- `scripts/kcadm-get-groups.sh`: list groups with members
-- `scripts/kcadm-create-user.sh`: interactive user creation helper
-- `scripts/kcadm-create-group.sh`: interactive group creation helper
-- `scripts/kcadm-add-user-to-group.sh`: interactively assign existing users to existing groups
-- `scripts/kcadm-delete-user.sh`: interactive multi-select user deletion
-- `scripts/kcadm-delete-group.sh`: interactive multi-select group deletion
-- `scripts/kcadm-new-client-initial-token.sh`: generate a client initial access token
-- `scripts/kcadm-get-clients.sh`: list clients in a realm
-- `scripts/kcadm-delete-client.sh`: interactive multi-select client deletion
-- `scripts/kcreg-create-client.sh`: interactive client creation helper
-
-## Configuration
-
-The following variables are used by targets:
-
-- `VERSION` (default: `26.5`)
-- `IMAGE` (default: `ghcr.io/bcollard/keycloak-cli`)
-- `KC_CONTAINER_NAME` (default: `keycloak-cli`)
-- `KC_SERVER_HOSTNAME` (default: `keycloak.kong.runlocal.dev`)
-- `KC_ADMIN_PASSWORD` (required for `login`) - password for the `admin` user in the `master` realm, used to obtain an access token for admin operations
-- `KC_ADMIN_SECRET_HEADER` (used by admin endpoints) - extra header value required by my LB to protect KC admin endpoints
-
-Example:
-
-```bash
-export KC_SERVER_HOSTNAME="keycloak.kong.runlocal.dev" # the domain name your Keycloak instance is accessible at
-export KC_ADMIN_PASSWORD="<admin-password>"            # password for the `admin` user in the `master` realm
-# optional
-export KC_ADMIN_SECRET_HEADER="<secret-header-value>"
-```
-
-When `KC_ADMIN_SECRET_HEADER` is set, admin scripts append `-h keycloak-kong=<value>` to `kcadm.sh` calls.
-When it is unset/empty, no extra header is added.
 
 ## Quick start
 
-Build and run container:
-
 ```bash
-make docker-run
+kc login
+# → prompts for server URL, admin username, password
+# → stores token in ~/.config/kc/token.json
+
+kc realm list
+kc realm create
+kc client list
 ```
 
-Show all commands:
+
+## Configuration
+
+The following environment variables are supported:
+
+| Variable | Description |
+|---|---|
+| `KC_SERVER` | Server URL (e.g. `https://keycloak.example.com`), skips the login prompt |
+| `KC_ADMIN_USER` | Admin username (default: `admin`), skips the login prompt |
+| `KC_ADMIN_PASSWORD` | Admin password, skips the login prompt |
+| `KC_ADMIN_SECRET_HEADER` | Optional extra header value sent as `keycloak-kong: <value>` on every admin request |
+| `REALM_NAME` | Pre-select realm for any command that asks for one |
+
+Example `.envrc` (direnv):
 
 ```bash
-make help
+export KC_SERVER="https://keycloak.kong.runlocal.dev"
+export KC_ADMIN_PASSWORD="<admin-password>"
+# optional
+export KC_ADMIN_SECRET_HEADER="<secret-header-value>"
+export REALM_NAME="my-realm"
 ```
 
-## Key targets
+Token and config are stored in `~/.config/kc/` (mode `0600`).
+The token is refreshed automatically before it expires.
 
-### Docker
+
+## Commands
+
+### `kc login`
+
+Authenticate with Keycloak. Stores the access + refresh token locally.
 
 ```bash
-make docker-build
-make docker-run
-make docker-stop
-make docker-cleanup
+kc login
+KC_SERVER=https://kc.example.com KC_ADMIN_PASSWORD=secret kc login
 ```
 
-### Realm admin (`kcadm`)
+### Realm
 
 ```bash
-make login
-make get-realms
-make create-realm
-make delete-realm
+kc realm list
+kc realm create
+kc realm delete     # interactive multi-select + confirmation; master realm excluded
 ```
 
-`delete-realm` presents a multi-select list of all realms (the `master` realm is excluded). Requires confirmation before proceeding.
+### User
 
-### User and group management (`kcadm`)
-
-All targets below support a `REALM_NAME` environment variable to skip the realm prompt.
+All user commands support `REALM_NAME`.
 
 ```bash
-make get-users
-make get-groups
-make create-user
-make create-group
-make add-user-to-group
-make delete-user
-make delete-group
+kc user list        # lists users enriched with their group memberships
+kc user create      # interactive: username, email, name, password, group assignment
+kc user delete      # interactive multi-select + confirmation
 ```
-
-`get-users` lists all users enriched with their group memberships (username, email, first/last name, enabled, groups).
-
-`get-groups` lists all top-level groups enriched with their members (name, path, subGroupCount, members).
-
-`create-user` prompts for realm, username, optional email/first name/last name, optional password (with temporary flag), and optional group assignment via multi-select.
-
-`create-group` prompts for realm and group name, and optionally creates the group as a subgroup of an existing group by parent group ID.
-
-`add-user-to-group` shows a multi-select list of users then a multi-select list of groups, and adds every selected user to every selected group.
-
-`delete-user` shows a multi-select list of users and deletes the chosen ones after confirmation.
-
-`delete-group` shows a multi-select list of groups and deletes the chosen ones after confirmation.
 
 ```bash
-REALM_NAME="myrealm" make get-users
-REALM_NAME="myrealm" make get-groups
-REALM_NAME="myrealm" make create-user
-REALM_NAME="myrealm" make create-group
-REALM_NAME="myrealm" make add-user-to-group
-REALM_NAME="myrealm" make delete-user
-REALM_NAME="myrealm" make delete-group
+REALM_NAME=myrealm kc user list
+REALM_NAME=myrealm kc user create
+REALM_NAME=myrealm kc user delete
 ```
 
-### Client management (`kcadm` + `kcreg`)
+### Group
 
 ```bash
-make get-clients
-make new-client-initial-token
-make create-client
-make delete-client
+kc group list       # lists groups enriched with their members
+kc group create     # interactive: name, optional parent group
+kc group delete     # interactive multi-select + confirmation
+kc group add-member # multi-select users × groups (Cartesian assignment)
 ```
-
-`get-clients` lists all clients in a realm (clientId, name, description, enabled, publicClient, serviceAccountsEnabled).
-
-`new-client-initial-token` generates a client initial access token and prints the raw token value. Requires a realm name prompt.
-
-`create-client` prompts for realm name and initial token, then launches the interactive `gum` flow picker (see below).
-
-`delete-client` shows a multi-select list of clients and deletes the chosen ones after confirmation.
-
-All four targets support `REALM_NAME` (and `INITIAL_TOKEN` for `create-client`):
 
 ```bash
-REALM_NAME="myrealm" make get-clients
-REALM_NAME="myrealm" make delete-client
-REALM_NAME="myrealm" INITIAL_TOKEN="<token>" make create-client
+REALM_NAME=myrealm kc group list
+REALM_NAME=myrealm kc group add-member
 ```
 
-## Interactive client creation behavior
-
-The `create-client` script prompts for:
-
-- Realm (unless provided by env)
-- Initial access token (unless provided by env)
-- Client ID / name
-- Enabled OAuth/OIDC flows (multi-select)
-- Redirect URIs (only when Authorization Code Flow is enabled; accepts comma-separated and/or multiline values)
-- JWT Authorization Grant IdP (only when JWT grant is enabled)
-
-Then it:
-
-- Builds JSON payload safely with `jq`
-- Calls `./kcreg.sh create`
-- Prints the full create response
-- Prints the client secret if returned
-
-## Advanced usage
-
-Run scripts directly with env vars:
+### Client
 
 ```bash
-REALM_NAME="myrealm" INITIAL_TOKEN="<token>" KC_CONTAINER_NAME="keycloak-cli" ./scripts/kcreg-create-client.sh
-REALM_NAME="myrealm" KC_CONTAINER_NAME="keycloak-cli" ./scripts/kcadm-get-users.sh
+kc client list
+kc client create    # interactive: client ID, name, OAuth2 flows, redirect URIs
+kc client delete    # interactive multi-select + confirmation
 ```
+
+```bash
+REALM_NAME=myrealm kc client list
+REALM_NAME=myrealm kc client create
+REALM_NAME=myrealm kc client delete
+```
+
+`kc client create` flow picker supports:
+- Authorization Code Flow
+- Implicit Flow
+- Resource Owner Password Credentials
+- Client Credentials Grant
+- Device Authorization Grant
+- Token Exchange
+
+### Client scope
+
+```bash
+kc client-scope create   # name + description; type=default, include.in.token.scope=true
+kc client-scope add      # select client → default/optional → select scope
+```
+
+```bash
+REALM_NAME=myrealm kc client-scope create
+REALM_NAME=myrealm kc client-scope add
+```
+
+
+## Distribution
+
+Releases are built with [goreleaser](https://goreleaser.com/) and published to GitHub Releases
+via the `.github/workflows/release.yml` workflow on every `v*` tag push.
+
+Binaries are provided for:
+- macOS (amd64, arm64)
+- Linux (amd64, arm64)
+- Windows (amd64)
+
+
+## Legacy Docker-based scripts
+
+The original shell scripts (`scripts/`) and Docker targets remain available for reference
+but are no longer the primary interface. See `make help` for the full target list.
+

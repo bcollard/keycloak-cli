@@ -1,3 +1,6 @@
 .envrc
 *.cast
 .claude
+dist/
+kc
+.third_party_licenses/

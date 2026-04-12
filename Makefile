@@ -1,11 +1,16 @@
-# Makefile for Keycloak on Cloud Run with Terraform
+# Makefile for keycloak-cli
 .ONESHELL:
 .DEFAULT_GOAL := help
 
-# Configuration
-VERSION ?= 26.5
+BINARY    := kc
+VERSION   ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS   := -ldflags "-s -w -X main.version=$(VERSION) -X main.commit=$(shell git rev-parse --short HEAD 2>/dev/null || echo unknown) -X main.date=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)"
+BUILD_DIR := ./dist
+
+# Configuration (legacy Docker targets)
+KC_VERSION        ?= 26.5
 KC_CONTAINER_NAME ?= keycloak-cli
-IMAGE ?= ghcr.io/bcollard/keycloak-cli
+IMAGE             ?= ghcr.io/bcollard/keycloak-cli
 KC_SERVER_HOSTNAME ?= keycloak.kong.runlocal.dev
 
 .PHONY: help
@@ -20,12 +25,39 @@ help: ## Show this help message
 	 BLUE="\033[34m"; \
 	 printf "$$BOLD$$PURPLE\n== keycloak-cli Make targets ==\n$$RESET"; \
 	 printf "$$DIM----------------------------------------------------------------------$$RESET\n"; \
-	 printf "$$BOLD$$YELLOW Lifecycle$$RESET $$DIM->$$RESET $$GREEN docker-run $$DIM/$$RESET$$GREEN docker-cleanup$$RESET\n"; \
+	 printf "$$BOLD$$YELLOW Go CLI$$RESET $$DIM->$$RESET $$GREEN build $$DIM/$$RESET$$GREEN install$$RESET\n"; \
+ printf "$$BOLD$$YELLOW Docker (legacy)$$RESET $$DIM->$$RESET $$GREEN docker-run $$DIM/$$RESET$$GREEN docker-cleanup$$RESET\n"; \
 	 printf "$$BOLD$$YELLOW Realm Admin$$RESET $$DIM->$$RESET $$GREEN login $$DIM then$$RESET $$GREEN get-realms $$DIM/$$RESET$$GREEN create-realm $$DIM/$$RESET$$GREEN delete-realm$$RESET\n"; \
 	 printf "$$BOLD$$YELLOW User/Group Admin$$RESET $$DIM->$$RESET $$GREEN get-users $$DIM/$$RESET$$GREEN get-groups $$DIM/$$RESET$$GREEN create-user $$DIM/$$RESET$$GREEN create-group $$DIM/$$RESET$$GREEN add-user-to-group $$DIM/$$RESET$$GREEN delete-user $$DIM/$$RESET$$GREEN delete-group$$RESET\n"; \
-	 printf "$$BOLD$$YELLOW Client Reg$$RESET $$DIM->$$RESET $$GREEN get-clients $$DIM/$$RESET$$GREEN new-client-initial-token $$DIM then$$RESET $$GREEN create-client $$DIM/$$RESET$$GREEN delete-client$$RESET\n\n"; \
+	 printf "$$BOLD$$YELLOW Client Reg$$RESET $$DIM->$$RESET $$GREEN get-clients $$DIM/$$RESET$$GREEN new-client-initial-token $$DIM then$$RESET $$GREEN create-client $$DIM/$$RESET$$GREEN delete-client $$DIM/$$RESET$$GREEN add-scope-to-client$$RESET\n"; \
+ printf "$$BOLD$$YELLOW Client Scope$$RESET $$DIM->$$RESET $$GREEN create-client-scope $$DIM/$$RESET$$GREEN add-scope-to-client$$RESET\n\n"; \
 	 printf "$$BOLD$$BLUE Available targets$$RESET\n"; \
 	 grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[1;36m%-36s\033[0m \033[2m%s\033[0m\n", $$1, $$2}'
+
+
+######################
+# Go CLI
+######################
+.PHONY: build install clean tidy snapshot release-check
+
+build: ## Build the kc binary into ./dist
+	mkdir -p $(BUILD_DIR)
+	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY) .
+
+install: ## Install the kc binary via go install
+	go install $(LDFLAGS) .
+
+clean: ## Remove build artifacts
+	rm -rf $(BUILD_DIR)
+
+tidy: ## Tidy go.mod and go.sum
+	go mod tidy
+
+snapshot: ## Local dry-run release without publishing (requires goreleaser)
+	goreleaser release --snapshot --clean
+
+release-check: ## Validate .goreleaser.yaml
+	goreleaser check
 
 
 ######################
@@ -33,20 +65,20 @@ help: ## Show this help message
 ######################
 .PHONY: docker-build docker-stop docker-run docker-exec docker-cleanup
 docker-build: ## Build the Docker image for Keycloak
-	@docker build -t $(IMAGE):$(VERSION) --build-arg KEYCLOAK_VERSION=$(VERSION) --build-arg KC_SERVER_HOSTNAME=$(KC_SERVER_HOSTNAME) .
+	@docker build -t $(IMAGE):$(KC_VERSION) --build-arg KEYCLOAK_VERSION=$(KC_VERSION) --build-arg KC_SERVER_HOSTNAME=$(KC_SERVER_HOSTNAME) .
 
 docker-stop: ## Stop and remove the Docker container
 	@docker stop $(KC_CONTAINER_NAME) || true
 	@docker rm $(KC_CONTAINER_NAME) || true
 
 docker-run: docker-build ## Build and run the Keycloak Docker container
-	@docker run -d --name $(KC_CONTAINER_NAME) -it $(IMAGE):$(VERSION)
+	@docker run -d --name $(KC_CONTAINER_NAME) -it $(IMAGE):$(KC_VERSION)
 
 docker-exec: ## Execute a bash shell inside the running Keycloak container
 	@docker exec -it $(KC_CONTAINER_NAME) /bin/bash
 
 docker-cleanup: docker-stop ## Clean up Docker container
-	@docker rmi $(IMAGE):$(VERSION) || true
+	@docker rmi $(IMAGE):$(KC_VERSION) || true
 
 
 ######################
@@ -95,7 +127,7 @@ delete-group: login ## Delete one or more groups from a realm (interactive; supp
 ######################
 # Client registration
 ######################
-.PHONY: get-clients new-client-initial-token create-client delete-client
+.PHONY: get-clients new-client-initial-token create-client delete-client add-scope-to-client create-client-scope
 get-clients: login ## List clients in a realm (supports REALM_NAME env var)
 	@KC_CONTAINER_NAME=$(KC_CONTAINER_NAME) KC_SERVER_HOSTNAME=$(KC_SERVER_HOSTNAME) KC_ADMIN_SECRET_HEADER="${KC_ADMIN_SECRET_HEADER}" ./scripts/kcadm-get-clients.sh
 
@@ -107,4 +139,10 @@ create-client: ## Create a new client in Keycloak using kcreg (supports INITIAL_
 
 delete-client: login ## Delete one or more clients from a realm (interactive; supports REALM_NAME env var)
 	@KC_CONTAINER_NAME=$(KC_CONTAINER_NAME) KC_SERVER_HOSTNAME=$(KC_SERVER_HOSTNAME) KC_ADMIN_SECRET_HEADER="${KC_ADMIN_SECRET_HEADER}" ./scripts/kcadm-delete-client.sh
+
+add-scope-to-client: login ## Add a scope (default or optional) to a client (interactive; supports REALM_NAME env var)
+	@KC_CONTAINER_NAME=$(KC_CONTAINER_NAME) KC_SERVER_HOSTNAME=$(KC_SERVER_HOSTNAME) KC_ADMIN_SECRET_HEADER="${KC_ADMIN_SECRET_HEADER}" ./scripts/kcadm-add-scope-to-client.sh
+
+create-client-scope: login ## Create a custom client scope (type=default, included in token scope) in a realm (interactive; supports REALM_NAME env var)
+	@KC_CONTAINER_NAME=$(KC_CONTAINER_NAME) KC_SERVER_HOSTNAME=$(KC_SERVER_HOSTNAME) KC_ADMIN_SECRET_HEADER="${KC_ADMIN_SECRET_HEADER}" ./scripts/kcadm-create-client-scope.sh
 
