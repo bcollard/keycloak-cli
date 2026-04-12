@@ -26,6 +26,7 @@ jobs:
           go install github.com/google/go-licenses@latest
           go-licenses save . \
             --save_path=.third_party_licenses \
+            --ignore github.com/bcollard/keycloak-cli \
             --force
 
       - name: Run GoReleaser
