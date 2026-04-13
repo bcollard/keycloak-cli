@@ -59,6 +59,124 @@ kc client list -r myrealm
 ```
 
 
+## Commands
+
+### Login & Logout
+
+Authenticate with Keycloak. Stores the access + refresh token in `~/.config/kc/token.json`.
+Uses stored config as a fallback — if all values are already set via `kc config`, running
+`kc login` requires no flags or prompts.
+
+```
+Flags:
+  -s, --server string               Keycloak server URL (overrides KC_SERVER / stored config)
+  -u, --user string                 Admin username (overrides KC_ADMIN_USER / stored config)
+      --secret-header-name string   Extra header name (overrides KC_ADMIN_SECRET_HEADER_NAME / stored config)
+```
+
+The header value is never accepted as a CLI flag — use `KC_ADMIN_SECRET_HEADER_VALUE`,
+stored config, or `kc login` will prompt for it.
+
+```bash
+kc login
+kc login -s https://kc.example.com -u admin
+kc login --secret-header-name my-header
+# logout
+kc logout
+```
+
+### CLI Config
+
+```bash
+kc config list
+kc config show
+kc config set server https://keycloak.example.com
+kc config set username admin
+kc config set password                 # prompts
+kc config set secret-header-name my-header
+kc config set secret-header-value     # prompts
+```
+
+### CLI Version
+
+```bash
+kc version
+kc --version
+```
+
+### Realm management
+
+```bash
+kc realm list
+kc realm create
+kc realm delete     # interactive multi-select + confirmation; master realm excluded
+```
+
+### User management
+
+All user commands support `-r`/`--realm` (flag → `REALM_NAME` env var → stored config → prompt).
+
+```bash
+kc user list        # lists users enriched with their group memberships
+kc user create      # interactive: username, email, name, password, group assignment
+kc user delete      # interactive multi-select + confirmation
+```
+
+```bash
+kc user list -r myrealm
+kc user create -r myrealm
+kc user delete -r myrealm
+```
+
+### Group management
+
+```bash
+kc group list       # lists groups enriched with their members
+kc group create     # interactive: name, optional parent group
+kc group delete     # interactive multi-select + confirmation
+kc group add-member # multi-select users × groups (Cartesian assignment)
+```
+
+```bash
+kc group list -r myrealm
+kc group add-member -r myrealm
+```
+
+### Client management
+
+```bash
+kc client list
+kc client create    # interactive: client ID, name, OAuth2 flows, redirect URIs
+kc client delete    # interactive multi-select + confirmation
+```
+
+```bash
+kc client list -r myrealm
+kc client create -r myrealm
+kc client delete -r myrealm
+```
+
+`kc client create` flow picker supports:
+- Authorization Code Flow
+- Implicit Flow
+- Resource Owner Password Credentials
+- Client Credentials Grant
+- Device Authorization Grant
+- Token Exchange
+
+### Client scope management
+
+```bash
+kc client-scope create   # name + description; type=default, include.in.token.scope=true
+kc client-scope add      # select client → default/optional → select scope
+```
+
+```bash
+kc client-scope create -r myrealm
+kc client-scope add -r myrealm
+```
+
+
 ## Configuration
 
 ### Stored config (`~/.config/kc/config.json`)
@@ -111,121 +229,6 @@ export REALM_NAME="my-realm"
 
 For every value: **CLI flag → env var → stored config → interactive prompt**
 
-
-## Commands
-
-### `kc login`
-
-Authenticate with Keycloak. Stores the access + refresh token in `~/.config/kc/token.json`.
-Uses stored config as a fallback — if all values are already set via `kc config`, running
-`kc login` requires no flags or prompts.
-
-```
-Flags:
-  -s, --server string               Keycloak server URL (overrides KC_SERVER / stored config)
-  -u, --user string                 Admin username (overrides KC_ADMIN_USER / stored config)
-      --secret-header-name string   Extra header name (overrides KC_ADMIN_SECRET_HEADER_NAME / stored config)
-```
-
-The header value is never accepted as a CLI flag — use `KC_ADMIN_SECRET_HEADER_VALUE`,
-stored config, or `kc login` will prompt for it.
-
-```bash
-kc login
-kc login -s https://kc.example.com -u admin
-kc login --secret-header-name my-header
-```
-
-### `kc config`
-
-```bash
-kc config list
-kc config show
-kc config set server https://keycloak.example.com
-kc config set username admin
-kc config set password                 # prompts
-kc config set secret-header-name my-header
-kc config set secret-header-value     # prompts
-```
-
-### `kc version`
-
-```bash
-kc version
-kc --version
-```
-
-### Realm
-
-```bash
-kc realm list
-kc realm create
-kc realm delete     # interactive multi-select + confirmation; master realm excluded
-```
-
-### User
-
-All user commands support `-r`/`--realm` (flag → `REALM_NAME` env var → stored config → prompt).
-
-```bash
-kc user list        # lists users enriched with their group memberships
-kc user create      # interactive: username, email, name, password, group assignment
-kc user delete      # interactive multi-select + confirmation
-```
-
-```bash
-kc user list -r myrealm
-kc user create -r myrealm
-kc user delete -r myrealm
-```
-
-### Group
-
-```bash
-kc group list       # lists groups enriched with their members
-kc group create     # interactive: name, optional parent group
-kc group delete     # interactive multi-select + confirmation
-kc group add-member # multi-select users × groups (Cartesian assignment)
-```
-
-```bash
-kc group list -r myrealm
-kc group add-member -r myrealm
-```
-
-### Client
-
-```bash
-kc client list
-kc client create    # interactive: client ID, name, OAuth2 flows, redirect URIs
-kc client delete    # interactive multi-select + confirmation
-```
-
-```bash
-kc client list -r myrealm
-kc client create -r myrealm
-kc client delete -r myrealm
-```
-
-`kc client create` flow picker supports:
-- Authorization Code Flow
-- Implicit Flow
-- Resource Owner Password Credentials
-- Client Credentials Grant
-- Device Authorization Grant
-- Token Exchange
-
-### Client scope
-
-```bash
-kc client-scope create   # name + description; type=default, include.in.token.scope=true
-kc client-scope add      # select client → default/optional → select scope
-```
-
-```bash
-kc client-scope create -r myrealm
-kc client-scope add -r myrealm
-```
 
 
 ## Distribution
