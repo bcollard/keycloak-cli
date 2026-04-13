@@ -11,16 +11,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var realmFlag string
+
 var Cmd = &cobra.Command{
 	Use:   "group",
 	Short: "Manage Keycloak groups",
 }
 
 func init() {
+	Cmd.PersistentFlags().StringVarP(&realmFlag, "realm", "r", "", "Realm name (overrides REALM_NAME env var)")
 	Cmd.AddCommand(listCmd, createCmd, deleteCmd, addMemberCmd)
 }
 
 func realmFromEnvOrPrompt() (string, error) {
+	if realmFlag != "" {
+		return realmFlag, nil
+	}
 	if r := os.Getenv("REALM_NAME"); r != "" {
 		return r, nil
 	}

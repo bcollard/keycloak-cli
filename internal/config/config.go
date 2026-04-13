@@ -8,8 +8,60 @@ import (
 )
 
 type Config struct {
-	ServerURL         string `json:"server_url"`
-	AdminSecretHeader string `json:"admin_secret_header,omitempty"`
+	ServerURL              string `json:"server_url"`
+	Username               string `json:"username,omitempty"`
+	Password               string `json:"password,omitempty"`
+	AdminSecretHeaderName  string `json:"admin_secret_header_name,omitempty"`
+	AdminSecretHeaderValue string `json:"admin_secret_header_value,omitempty"`
+}
+
+// Keys lists all settable config keys in display order.
+var Keys = []string{
+	"server",
+	"username",
+	"password",
+	"secret-header-name",
+	"secret-header-value",
+}
+
+// SensitiveKeys are masked in output.
+var SensitiveKeys = map[string]bool{
+	"password":            true,
+	"secret-header-value": true,
+}
+
+func (c *Config) Get(key string) string {
+	switch key {
+	case "server":
+		return c.ServerURL
+	case "username":
+		return c.Username
+	case "password":
+		return c.Password
+	case "secret-header-name":
+		return c.AdminSecretHeaderName
+	case "secret-header-value":
+		return c.AdminSecretHeaderValue
+	}
+	return ""
+}
+
+func (c *Config) Set(key, value string) bool {
+	switch key {
+	case "server":
+		c.ServerURL = value
+	case "username":
+		c.Username = value
+	case "password":
+		c.Password = value
+	case "secret-header-name":
+		c.AdminSecretHeaderName = value
+	case "secret-header-value":
+		c.AdminSecretHeaderValue = value
+	default:
+		return false
+	}
+	return true
 }
 
 type Token struct {

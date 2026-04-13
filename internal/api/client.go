@@ -14,23 +14,25 @@ import (
 )
 
 type Client struct {
-	httpClient  *http.Client
-	serverURL   string
-	secretHeader string
-	token       *config.Token
+	httpClient        *http.Client
+	serverURL         string
+	secretHeaderName  string
+	secretHeaderValue string
+	token             *config.Token
 }
 
 func New(cfg *config.Config, token *config.Token) *Client {
 	return &Client{
-		httpClient:   &http.Client{Timeout: 30 * time.Second},
-		serverURL:    strings.TrimRight(cfg.ServerURL, "/"),
-		secretHeader: cfg.AdminSecretHeader,
-		token:        token,
+		httpClient:        &http.Client{Timeout: 30 * time.Second},
+		serverURL:         strings.TrimRight(cfg.ServerURL, "/"),
+		secretHeaderName:  cfg.AdminSecretHeaderName,
+		secretHeaderValue: cfg.AdminSecretHeaderValue,
+		token:             token,
 	}
 }
 
 // Login obtains a token via ROPC and saves both config and token.
-func Login(serverURL, username, password, secretHeader string) error {
+func Login(serverURL, username, password, secretHeaderName, secretHeaderValue string) error {
 	serverURL = strings.TrimRight(serverURL, "/")
 	tokenURL := fmt.Sprintf("%s/realms/master/protocol/openid-connect/token", serverURL)
 
@@ -69,7 +71,7 @@ func Login(serverURL, username, password, secretHeader string) error {
 		RefreshExpiresAt: now.Add(time.Duration(raw.RefreshExpiresIn) * time.Second),
 	}
 
-	cfg := &config.Config{ServerURL: serverURL, AdminSecretHeader: secretHeader}
+	cfg := &config.Config{ServerURL: serverURL, AdminSecretHeaderName: secretHeaderName, AdminSecretHeaderValue: secretHeaderValue}
 	if err := config.SaveConfig(cfg); err != nil {
 		return err
 	}
@@ -141,8 +143,8 @@ func (c *Client) do(method, path string, body any) ([]byte, int, error) {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.secretHeader != "" {
-		req.Header.Set("keycloak-kong", c.secretHeader)
+	if c.secretHeaderName != "" && c.secretHeaderValue != "" {
+		req.Header.Set(c.secretHeaderName, c.secretHeaderValue)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -154,13 +156,37 @@ func (c *Client) do(method, path string, body any) ([]byte, int, error) {
 	return respBody, resp.StatusCode, nil
 }
 
+// checkResponse returns a clear error when the server returns a non-JSON body
+// (e.g. an HTML error page from a reverse proxy) or a 4xx/5xx status.
+func checkResponse(method, path string, status int, body []byte) error {
+	if len(body) > 0 && body[0] == '<' {
+		hint := ""
+		if status == http.StatusOK {
+			// LB returned 200 + HTML — likely a missing or invalid secret header.
+			hint = " (the server returned an HTML page instead of JSON — " +
+				"you may need to re-run 'kc login' with --secret-header-name and KC_ADMIN_SECRET_HEADER_VALUE)"
+		}
+		return fmt.Errorf("%s %s failed (%d): server returned HTML instead of JSON%s",
+			method, path, status, hint)
+	}
+	switch {
+	case status == http.StatusUnauthorized:
+		return fmt.Errorf("%s %s failed (401 Unauthorized): token may be expired — run: kc login", method, path)
+	case status == http.StatusForbidden:
+		return fmt.Errorf("%s %s failed (403 Forbidden): check your credentials and secret header — run: kc login", method, path)
+	case status >= 400:
+		return fmt.Errorf("%s %s failed (%d): %s", method, path, status, body)
+	}
+	return nil
+}
+
 func (c *Client) Get(path string, out any) error {
 	body, status, err := c.do(http.MethodGet, path, nil)
 	if err != nil {
 		return err
 	}
-	if status != http.StatusOK {
-		return fmt.Errorf("GET %s failed (%d): %s", path, status, body)
+	if err := checkResponse(http.MethodGet, path, status, body); err != nil {
+		return err
 	}
 	return json.Unmarshal(body, out)
 }
@@ -168,6 +194,9 @@ func (c *Client) Get(path string, out any) error {
 func (c *Client) Post(path string, payload any) (string, error) {
 	body, status, err := c.do(http.MethodPost, path, payload)
 	if err != nil {
+		return "", err
+	}
+	if err := checkResponse(http.MethodPost, path, status, body); err != nil {
 		return "", err
 	}
 	if status != http.StatusCreated && status != http.StatusOK {
@@ -189,6 +218,9 @@ func (c *Client) PostRaw(path string, payload any) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := checkResponse(http.MethodPost, path, status, body); err != nil {
+		return nil, err
+	}
 	if status != http.StatusCreated && status != http.StatusOK {
 		return nil, fmt.Errorf("POST %s failed (%d): %s", path, status, body)
 	}
@@ -200,6 +232,9 @@ func (c *Client) Put(path string, payload any) error {
 	if err != nil {
 		return err
 	}
+	if err := checkResponse(http.MethodPut, path, status, body); err != nil {
+		return err
+	}
 	if status != http.StatusNoContent && status != http.StatusOK {
 		return fmt.Errorf("PUT %s failed (%d): %s", path, status, body)
 	}
@@ -209,6 +244,9 @@ func (c *Client) Put(path string, payload any) error {
 func (c *Client) Delete(path string) error {
 	body, status, err := c.do(http.MethodDelete, path, nil)
 	if err != nil {
+		return err
+	}
+	if err := checkResponse(http.MethodDelete, path, status, body); err != nil {
 		return err
 	}
 	if status != http.StatusNoContent && status != http.StatusOK {
@@ -234,8 +272,8 @@ func (c *Client) PostCreated(path string, payload any) (string, error) {
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token.AccessToken)
 	req.Header.Set("Content-Type", "application/json")
-	if c.secretHeader != "" {
-		req.Header.Set("keycloak-kong", c.secretHeader)
+	if c.secretHeaderName != "" && c.secretHeaderValue != "" {
+		req.Header.Set(c.secretHeaderName, c.secretHeaderValue)
 	}
 
 	resp, err := c.httpClient.Do(req)

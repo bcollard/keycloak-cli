@@ -3,10 +3,6 @@
 A portable Go CLI (`kc`) to manage Keycloak realms, users, groups and clients.
 No Docker. No Java. A single static binary.
 
-Demo:
-
-[![asciicast](https://asciinema.org/a/791850.svg)](https://asciinema.org/a/791850)
-
 
 ## Install
 
@@ -46,51 +42,117 @@ make install        # builds ./kc and copies to /usr/local/bin
 ## Quick start
 
 ```bash
-kc login
-# → prompts for server URL, admin username, password
-# → stores token in ~/.config/kc/token.json
+# one-time setup
+kc config set server https://keycloak.example.com
+kc config set username admin
+kc config set password                 # prompts
+kc config set secret-header-name my-header
+kc config set secret-header-value     # prompts
 
+# authenticate (uses stored config — no flags needed)
+kc login
+
+# use
 kc realm list
-kc realm create
-kc client list
+kc user list -r myrealm
+kc client list -r myrealm
 ```
 
 
 ## Configuration
 
-The following environment variables are supported:
+### Stored config (`~/.config/kc/config.json`)
+
+Use `kc config` to manage persistent configuration. Values here are the lowest-priority
+fallback — overridden by env vars or CLI flags.
+
+```bash
+kc config list                        # list available keys
+kc config show                        # show current values (sensitive keys masked)
+kc config set <key> [value]           # set a key; prompts for value if sensitive and omitted
+```
+
+| Key | Description |
+|---|---|
+| `server` | Keycloak server URL |
+| `username` | Admin username |
+| `password` | Admin password *(sensitive — masked in show)* |
+| `secret-header-name` | Extra header name forwarded on every admin request |
+| `secret-header-value` | Extra header value *(sensitive — masked in show)* |
+
+Config and token files are stored in `~/.config/kc/` (mode `0600`).
+The token is refreshed automatically before it expires.
+
+### Environment variables
+
+Env vars override stored config. Useful for CI or scripting.
 
 | Variable | Description |
 |---|---|
-| `KC_SERVER` | Server URL (e.g. `https://keycloak.example.com`), skips the login prompt |
-| `KC_ADMIN_USER` | Admin username (default: `admin`), skips the login prompt |
-| `KC_ADMIN_PASSWORD` | Admin password, skips the login prompt |
-| `KC_ADMIN_SECRET_HEADER` | Optional extra header value sent as `keycloak-kong: <value>` on every admin request |
+| `KC_SERVER` | Keycloak server URL |
+| `KC_ADMIN_USER` | Admin username |
+| `KC_ADMIN_PASSWORD` | Admin password |
+| `KC_ADMIN_SECRET_HEADER_NAME` | Extra header name |
+| `KC_ADMIN_SECRET_HEADER_VALUE` | Extra header value |
 | `REALM_NAME` | Pre-select realm for any command that asks for one |
 
 Example `.envrc` (direnv):
 
 ```bash
-export KC_SERVER="https://keycloak.kong.runlocal.dev"
+export KC_SERVER="https://keycloak.example.com"
 export KC_ADMIN_PASSWORD="<admin-password>"
 # optional
-export KC_ADMIN_SECRET_HEADER="<secret-header-value>"
+export KC_ADMIN_SECRET_HEADER_NAME="my-header"
+export KC_ADMIN_SECRET_HEADER_VALUE="<header-value>"
 export REALM_NAME="my-realm"
 ```
 
-Token and config are stored in `~/.config/kc/` (mode `0600`).
-The token is refreshed automatically before it expires.
+### Priority
+
+For every value: **CLI flag → env var → stored config → interactive prompt**
 
 
 ## Commands
 
 ### `kc login`
 
-Authenticate with Keycloak. Stores the access + refresh token locally.
+Authenticate with Keycloak. Stores the access + refresh token in `~/.config/kc/token.json`.
+Uses stored config as a fallback — if all values are already set via `kc config`, running
+`kc login` requires no flags or prompts.
+
+```
+Flags:
+  -s, --server string               Keycloak server URL (overrides KC_SERVER / stored config)
+  -u, --user string                 Admin username (overrides KC_ADMIN_USER / stored config)
+      --secret-header-name string   Extra header name (overrides KC_ADMIN_SECRET_HEADER_NAME / stored config)
+```
+
+The header value is never accepted as a CLI flag — use `KC_ADMIN_SECRET_HEADER_VALUE`,
+stored config, or `kc login` will prompt for it.
 
 ```bash
 kc login
-KC_SERVER=https://kc.example.com KC_ADMIN_PASSWORD=secret kc login
+kc login -s https://kc.example.com -u admin
+kc login --secret-header-name my-header
+```
+
+### `kc config`
+
+```bash
+kc config list
+kc config show
+kc config set server https://keycloak.example.com
+kc config set username admin
+kc config set password                 # prompts
+kc config set secret-header-name my-header
+kc config set secret-header-value     # prompts
+```
+
+### `kc version`
+
+```bash
+kc version
+kc --version
 ```
 
 ### Realm
@@ -103,7 +165,7 @@ kc realm delete     # interactive multi-select + confirmation; master realm excl
 
 ### User
 
-All user commands support `REALM_NAME`.
+All user commands support `-r`/`--realm` (flag → `REALM_NAME` env var → stored config → prompt).
 
 ```bash
 kc user list        # lists users enriched with their group memberships
@@ -112,9 +174,9 @@ kc user delete      # interactive multi-select + confirmation
 ```
 
 ```bash
-REALM_NAME=myrealm kc user list
-REALM_NAME=myrealm kc user create
-REALM_NAME=myrealm kc user delete
+kc user list -r myrealm
+kc user create -r myrealm
+kc user delete -r myrealm
 ```
 
 ### Group
@@ -127,8 +189,8 @@ kc group add-member # multi-select users × groups (Cartesian assignment)
 ```
 
 ```bash
-REALM_NAME=myrealm kc group list
-REALM_NAME=myrealm kc group add-member
+kc group list -r myrealm
+kc group add-member -r myrealm
 ```
 
 ### Client
@@ -140,9 +202,9 @@ kc client delete    # interactive multi-select + confirmation
 ```
 
 ```bash
-REALM_NAME=myrealm kc client list
-REALM_NAME=myrealm kc client create
-REALM_NAME=myrealm kc client delete
+kc client list -r myrealm
+kc client create -r myrealm
+kc client delete -r myrealm
 ```
 
 `kc client create` flow picker supports:
@@ -161,8 +223,8 @@ kc client-scope add      # select client → default/optional → select scope
 ```
 
 ```bash
-REALM_NAME=myrealm kc client-scope create
-REALM_NAME=myrealm kc client-scope add
+kc client-scope create -r myrealm
+kc client-scope add -r myrealm
 ```
 
 
@@ -174,11 +236,9 @@ via the `.github/workflows/release.yml` workflow on every `v*` tag push.
 Binaries are provided for:
 - macOS (amd64, arm64)
 - Linux (amd64, arm64)
-- Windows (amd64)
 
 
 ## Legacy Docker-based scripts
 
 The original shell scripts (`scripts/`) and Docker targets remain available for reference
 but are no longer the primary interface. See `make help` for the full target list.
-
