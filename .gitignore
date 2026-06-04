@@ -4,3 +4,4 @@
 dist/
 kc
 .third_party_licenses/
+tmp/

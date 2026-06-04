@@ -1,6 +1,9 @@
 package api
 
-import "fmt"
+import (
+	"fmt"
+	"net/url"
+)
 
 type User struct {
 	ID        string   `json:"id"`
@@ -19,12 +22,13 @@ type Credential struct {
 }
 
 type CreateUserRequest struct {
-	Username    string       `json:"username"`
-	Email       string       `json:"email,omitempty"`
-	FirstName   string       `json:"firstName,omitempty"`
-	LastName    string       `json:"lastName,omitempty"`
-	Enabled     bool         `json:"enabled"`
-	Credentials []Credential `json:"credentials,omitempty"`
+	Username      string       `json:"username"`
+	Email         string       `json:"email,omitempty"`
+	FirstName     string       `json:"firstName,omitempty"`
+	LastName      string       `json:"lastName,omitempty"`
+	Enabled       bool         `json:"enabled"`
+	EmailVerified bool         `json:"emailVerified,omitempty"`
+	Credentials   []Credential `json:"credentials,omitempty"`
 }
 
 func (c *Client) GetUsers(realm string) ([]User, error) {
@@ -65,4 +69,19 @@ func (c *Client) AddUserToGroup(realm, userID, groupID string) error {
 
 func (c *Client) DeleteUser(realm, userID string) error {
 	return c.Delete(fmt.Sprintf("/admin/realms/%s/users/%s", realm, userID))
+}
+
+// FindUserByUsername queries Keycloak for an exact username match.
+func (c *Client) FindUserByUsername(realm, username string) (*User, error) {
+	var users []User
+	path := fmt.Sprintf("/admin/realms/%s/users?username=%s&exact=true", realm, url.QueryEscape(username))
+	if err := c.Get(path, &users); err != nil {
+		return nil, err
+	}
+	for i := range users {
+		if users[i].Username == username {
+			return &users[i], nil
+		}
+	}
+	return nil, fmt.Errorf("user not found: username=%q", username)
 }

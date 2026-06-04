@@ -120,12 +120,28 @@ All user commands support `-r`/`--realm` (flag → `REALM_NAME` env var → stor
 kc user list        # lists users enriched with their group memberships
 kc user create      # interactive: username, email, name, password, group assignment
 kc user delete      # interactive multi-select + confirmation
+kc user set-password <username> --password <p> [--temporary]
 ```
 
 ```bash
 kc user list -r myrealm
 kc user create -r myrealm
 kc user delete -r myrealm
+```
+
+Non-interactive `create` (any flag triggers script mode; `--username` is required):
+
+```bash
+kc user create -r myrealm \
+  --username alex --email alex@example.com --email-verified \
+  --password doe --group developers
+```
+
+Set-password by username (default) or UUID:
+
+```bash
+kc user set-password alex --password doe
+kc user set-password --user-id 7f8e... --password doe --temporary
 ```
 
 ### Group management
@@ -164,16 +180,56 @@ kc client delete -r myrealm
 - Device Authorization Grant
 - Token Exchange
 
+Non-interactive mode (script-friendly):
+
+```bash
+kc client create -r myrealm \
+  --client-id client-a --secret secret-a \
+  --direct-access-grants --token-exchange
+
+kc client create -r myrealm \
+  --client-id web-app --standard-flow \
+  --redirect-uri https://app.example.com/cb \
+  --attribute foo=bar
+```
+
 ### Client scope management
 
 ```bash
-kc client-scope create   # name + description; type=default, include.in.token.scope=true
-kc client-scope add      # select client → default/optional → select scope
+kc client-scope create     # name + description; type=default, include.in.token.scope=true
+kc client-scope add        # attach a scope to a client (default or optional)
+kc client-scope add-mapper # attach a protocol mapper to a scope
 ```
+
+Interactive:
 
 ```bash
 kc client-scope create -r myrealm
 kc client-scope add -r myrealm
+```
+
+Non-interactive (script-friendly):
+
+```bash
+# 1. create the scope
+kc client-scope create -r myrealm \
+  --name add-client-b-as-audience \
+  --include-in-token-scope
+
+# 2. add an audience protocol mapper to it
+kc client-scope add-mapper -r myrealm \
+  --scope add-client-b-as-audience \
+  --name aud-client-b \
+  --mapper-type oidc-audience-mapper \
+  --config included.client.audience=client-b \
+  --config access.token.claim=true \
+  --config id.token.claim=false
+
+# 3. attach the scope as optional to a client
+kc client-scope add -r myrealm \
+  --client client-a \
+  --scope add-client-b-as-audience \
+  --type optional
 ```
 
 
