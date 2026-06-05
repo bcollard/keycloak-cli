@@ -39,6 +39,12 @@ var (
 	setPwdTemporary bool
 )
 
+// delete flags (non-interactive when --username or --user-id is set)
+var (
+	deleteUsernames []string
+	deleteUserIDs   []string
+)
+
 func init() {
 	Cmd.PersistentFlags().StringVarP(&realmFlag, "realm", "r", "", "Realm name (overrides REALM_NAME env var)")
 
@@ -55,6 +61,9 @@ func init() {
 	setPasswordCmd.Flags().StringVar(&setPwdUserID, "user-id", "", "User UUID (alternative to positional username)")
 	setPasswordCmd.Flags().StringVar(&setPwdPassword, "password", "", "New password (required)")
 	setPasswordCmd.Flags().BoolVar(&setPwdTemporary, "temporary", false, "Mark password as temporary (user must change on first login)")
+
+	deleteCmd.Flags().StringArrayVar(&deleteUsernames, "username", nil, "Username to delete (repeatable; enables non-interactive mode)")
+	deleteCmd.Flags().StringArrayVar(&deleteUserIDs, "user-id", nil, "User UUID to delete (repeatable; enables non-interactive mode)")
 
 	Cmd.AddCommand(listCmd, createCmd, deleteCmd, setPasswordCmd)
 }
@@ -233,7 +242,7 @@ func runCreateInteractive(client *api.Client, realm string) error {
 
 var deleteCmd = &cobra.Command{
 	Use:   "delete",
-	Short: "Delete one or more users (interactive)",
+	Short: "Delete one or more users (interactive or via --username / --user-id)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := requireClient()
 		if err != nil {
@@ -244,58 +253,88 @@ var deleteCmd = &cobra.Command{
 			return err
 		}
 
-		users, err := client.GetUsers(realm)
-		if err != nil {
-			return err
+		if len(deleteUsernames) > 0 || len(deleteUserIDs) > 0 {
+			return runDeleteNonInteractive(client, realm)
 		}
-		if len(users) == 0 {
-			fmt.Println("No users found.")
-			return nil
-		}
-
-		var options []huh.Option[string]
-		for _, u := range users {
-			label := u.Username
-			parts := []string{}
-			if u.Email != "" {
-				parts = append(parts, u.Email)
-			}
-			if !u.Enabled {
-				parts = append(parts, "disabled")
-			}
-			if len(parts) > 0 {
-				label += "  (" + strings.Join(parts, ", ") + ")"
-			}
-			options = append(options, huh.NewOption(label, u.ID))
-		}
-
-		selected, err := tui.MultiSelect("Select users to delete:", options)
-		if err != nil {
-			return err
-		}
-		if len(selected) == 0 {
-			fmt.Println("No users selected.")
-			return nil
-		}
-
-		ok, err := tui.Confirm(fmt.Sprintf("Permanently delete %d user(s)?", len(selected)))
-		if err != nil {
-			return err
-		}
-		if !ok {
-			fmt.Println("Aborted.")
-			return nil
-		}
-
-		for _, id := range selected {
-			if err := client.DeleteUser(realm, id); err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to delete user %s: %v\n", id, err)
-				continue
-			}
-			fmt.Printf("Deleted user: %s\n", id)
-		}
-		return nil
+		return runDeleteInteractive(client, realm)
 	},
+}
+
+func runDeleteNonInteractive(client *api.Client, realm string) error {
+	for _, id := range deleteUserIDs {
+		if err := client.DeleteUser(realm, id); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to delete user %s: %v\n", id, err)
+			continue
+		}
+		fmt.Printf("Deleted user: %s\n", id)
+	}
+	for _, username := range deleteUsernames {
+		u, err := client.FindUserByUsername(realm, username)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to find user '%s': %v\n", username, err)
+			continue
+		}
+		if err := client.DeleteUser(realm, u.ID); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to delete user '%s': %v\n", username, err)
+			continue
+		}
+		fmt.Printf("Deleted user: %s (%s)\n", username, u.ID)
+	}
+	return nil
+}
+
+func runDeleteInteractive(client *api.Client, realm string) error {
+	users, err := client.GetUsers(realm)
+	if err != nil {
+		return err
+	}
+	if len(users) == 0 {
+		fmt.Println("No users found.")
+		return nil
+	}
+
+	var options []huh.Option[string]
+	for _, u := range users {
+		label := u.Username
+		parts := []string{}
+		if u.Email != "" {
+			parts = append(parts, u.Email)
+		}
+		if !u.Enabled {
+			parts = append(parts, "disabled")
+		}
+		if len(parts) > 0 {
+			label += "  (" + strings.Join(parts, ", ") + ")"
+		}
+		options = append(options, huh.NewOption(label, u.ID))
+	}
+
+	selected, err := tui.MultiSelect("Select users to delete:", options)
+	if err != nil {
+		return err
+	}
+	if len(selected) == 0 {
+		fmt.Println("No users selected.")
+		return nil
+	}
+
+	ok, err := tui.Confirm(fmt.Sprintf("Permanently delete %d user(s)?", len(selected)))
+	if err != nil {
+		return err
+	}
+	if !ok {
+		fmt.Println("Aborted.")
+		return nil
+	}
+
+	for _, id := range selected {
+		if err := client.DeleteUser(realm, id); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to delete user %s: %v\n", id, err)
+			continue
+		}
+		fmt.Printf("Deleted user: %s\n", id)
+	}
+	return nil
 }
 
 var setPasswordCmd = &cobra.Command{

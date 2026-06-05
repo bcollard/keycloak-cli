@@ -112,6 +112,13 @@ kc realm create
 kc realm delete     # interactive multi-select + confirmation; master realm excluded
 ```
 
+Non-interactive (any flag triggers script mode):
+
+```bash
+kc realm create --name myrealm
+kc realm delete --name myrealm --name otherrealm
+```
+
 ### User management
 
 All user commands support `-r`/`--realm` (flag → `REALM_NAME` env var → stored config → prompt).
@@ -137,6 +144,13 @@ kc user create -r myrealm \
   --password doe --group developers
 ```
 
+Non-interactive `delete` (any `--username` or `--user-id` triggers script mode; both repeatable):
+
+```bash
+kc user delete -r myrealm --username alex --username sam
+kc user delete -r myrealm --user-id 7f8e...
+```
+
 Set-password by username (default) or UUID:
 
 ```bash
@@ -156,6 +170,24 @@ kc group add-member # multi-select users × groups (Cartesian assignment)
 ```bash
 kc group list -r myrealm
 kc group add-member -r myrealm
+```
+
+Non-interactive (any identifier flag triggers script mode; `--name`/`--group` matches group name or full path):
+
+```bash
+# create (optionally as subgroup of an existing group)
+kc group create -r myrealm --name developers
+kc group create -r myrealm --name backend --parent developers
+
+# delete
+kc group delete -r myrealm --name developers --name /tenants/acme
+kc group delete -r myrealm --group-id 7f8e...
+
+# add-member (Cartesian: every user × every group)
+kc group add-member -r myrealm \
+  --user alex --user sam \
+  --group developers --group /tenants/acme
+kc group add-member -r myrealm --user-id 7f8e... --group-id 1a2b...
 ```
 
 ### Client management
@@ -191,6 +223,12 @@ kc client create -r myrealm \
   --client-id web-app --standard-flow \
   --redirect-uri https://app.example.com/cb \
   --attribute foo=bar
+```
+
+Non-interactive `delete` (any `--client-id` triggers script mode; repeatable):
+
+```bash
+kc client delete -r myrealm --client-id client-a --client-id web-app
 ```
 
 ### Client scope management

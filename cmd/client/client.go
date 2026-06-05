@@ -19,6 +19,9 @@ var Cmd = &cobra.Command{
 	Short: "Manage Keycloak clients",
 }
 
+// delete flags (non-interactive when --client-id is set)
+var deleteClientIDs []string
+
 // create flags (non-interactive when --client-id is set)
 var (
 	createClientID            string
@@ -52,6 +55,8 @@ func init() {
 	createCmd.Flags().StringArrayVar(&createRedirectURIs, "redirect-uri", nil, "Redirect URI (repeatable)")
 	createCmd.Flags().StringArrayVar(&createAttributes, "attribute", nil, "Extra attribute key=value (repeatable)")
 	createCmd.Flags().BoolVar(&createDisabled, "disabled", false, "Create the client disabled")
+
+	deleteCmd.Flags().StringArrayVar(&deleteClientIDs, "client-id", nil, "Client clientId to delete (repeatable; enables non-interactive mode)")
 
 	Cmd.AddCommand(listCmd, createCmd, deleteCmd)
 }
@@ -251,7 +256,7 @@ func runCreateInteractive(c *api.Client, realm string) error {
 
 var deleteCmd = &cobra.Command{
 	Use:   "delete",
-	Short: "Delete one or more clients (interactive)",
+	Short: "Delete one or more clients (interactive or via --client-id)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c, err := requireClient()
 		if err != nil {
@@ -262,54 +267,77 @@ var deleteCmd = &cobra.Command{
 			return err
 		}
 
-		clients, err := c.GetClients(realm)
-		if err != nil {
-			return err
+		if len(deleteClientIDs) > 0 {
+			return runDeleteNonInteractive(c, realm)
 		}
-		if len(clients) == 0 {
-			fmt.Println("No clients found.")
-			return nil
-		}
-
-		var options []huh.Option[string]
-		for _, cl := range clients {
-			label := cl.ClientID
-			if cl.Name != "" && cl.Name != cl.ClientID {
-				label += "  (" + cl.Name + ")"
-			}
-			if !cl.Enabled {
-				label += "  [disabled]"
-			}
-			options = append(options, huh.NewOption(label, cl.ID))
-		}
-
-		selected, err := tui.MultiSelect("Select clients to delete:", options)
-		if err != nil {
-			return err
-		}
-		if len(selected) == 0 {
-			fmt.Println("No clients selected.")
-			return nil
-		}
-
-		ok, err := tui.Confirm(fmt.Sprintf("Permanently delete %d client(s)? This cannot be undone.", len(selected)))
-		if err != nil {
-			return err
-		}
-		if !ok {
-			fmt.Println("Aborted.")
-			return nil
-		}
-
-		for _, id := range selected {
-			if err := c.DeleteClient(realm, id); err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to delete client %s: %v\n", id, err)
-				continue
-			}
-			fmt.Printf("Deleted client: %s\n", id)
-		}
-		return nil
+		return runDeleteInteractive(c, realm)
 	},
+}
+
+func runDeleteNonInteractive(c *api.Client, realm string) error {
+	for _, clientID := range deleteClientIDs {
+		cl, err := c.FindClientByClientID(realm, clientID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to find client '%s': %v\n", clientID, err)
+			continue
+		}
+		if err := c.DeleteClient(realm, cl.ID); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to delete client '%s': %v\n", clientID, err)
+			continue
+		}
+		fmt.Printf("Deleted client: %s (%s)\n", clientID, cl.ID)
+	}
+	return nil
+}
+
+func runDeleteInteractive(c *api.Client, realm string) error {
+	clients, err := c.GetClients(realm)
+	if err != nil {
+		return err
+	}
+	if len(clients) == 0 {
+		fmt.Println("No clients found.")
+		return nil
+	}
+
+	var options []huh.Option[string]
+	for _, cl := range clients {
+		label := cl.ClientID
+		if cl.Name != "" && cl.Name != cl.ClientID {
+			label += "  (" + cl.Name + ")"
+		}
+		if !cl.Enabled {
+			label += "  [disabled]"
+		}
+		options = append(options, huh.NewOption(label, cl.ID))
+	}
+
+	selected, err := tui.MultiSelect("Select clients to delete:", options)
+	if err != nil {
+		return err
+	}
+	if len(selected) == 0 {
+		fmt.Println("No clients selected.")
+		return nil
+	}
+
+	ok, err := tui.Confirm(fmt.Sprintf("Permanently delete %d client(s)? This cannot be undone.", len(selected)))
+	if err != nil {
+		return err
+	}
+	if !ok {
+		fmt.Println("Aborted.")
+		return nil
+	}
+
+	for _, id := range selected {
+		if err := c.DeleteClient(realm, id); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to delete client %s: %v\n", id, err)
+			continue
+		}
+		fmt.Printf("Deleted client: %s\n", id)
+	}
+	return nil
 }
 
 var requireClient func() (*api.Client, error)

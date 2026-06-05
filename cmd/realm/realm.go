@@ -16,7 +16,17 @@ var Cmd = &cobra.Command{
 	Short: "Manage Keycloak realms",
 }
 
+// create flags (non-interactive when --name is set)
+var createName string
+
+// delete flags (non-interactive when --name is set)
+var deleteNames []string
+
 func init() {
+	createCmd.Flags().StringVar(&createName, "name", "", "Realm name (enables non-interactive mode)")
+
+	deleteCmd.Flags().StringArrayVar(&deleteNames, "name", nil, "Realm name to delete (repeatable; enables non-interactive mode)")
+
 	Cmd.AddCommand(listCmd, createCmd, deleteCmd)
 }
 
@@ -40,15 +50,19 @@ var listCmd = &cobra.Command{
 
 var createCmd = &cobra.Command{
 	Use:   "create",
-	Short: "Create a new realm",
+	Short: "Create a new realm (interactive or via --name)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := requireClient()
 		if err != nil {
 			return err
 		}
-		name, err := tui.Input("Realm name", "my-realm", true)
-		if err != nil {
-			return err
+		name := createName
+		if name == "" {
+			n, err := tui.Input("Realm name", "my-realm", true)
+			if err != nil {
+				return err
+			}
+			name = n
 		}
 		if err := client.CreateRealm(name); err != nil {
 			return err
@@ -60,60 +74,83 @@ var createCmd = &cobra.Command{
 
 var deleteCmd = &cobra.Command{
 	Use:   "delete",
-	Short: "Delete one or more realms (interactive)",
+	Short: "Delete one or more realms (interactive or via --name)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := requireClient()
 		if err != nil {
 			return err
 		}
-		realms, err := client.GetRealms()
-		if err != nil {
-			return err
-		}
 
-		var options []huh.Option[string]
-		for _, r := range realms {
-			if r.Realm == "master" {
-				continue
-			}
-			label := r.Realm
-			if !r.Enabled {
-				label += " [disabled]"
-			}
-			options = append(options, huh.NewOption(label, r.Realm))
+		if len(deleteNames) > 0 {
+			return runDeleteNonInteractive(client, deleteNames)
 		}
-		if len(options) == 0 {
-			fmt.Println("No deletable realms found.")
-			return nil
-		}
-
-		selected, err := tui.MultiSelect("Select realms to delete:", options)
-		if err != nil {
-			return err
-		}
-		if len(selected) == 0 {
-			fmt.Println("No realms selected.")
-			return nil
-		}
-
-		ok, err := tui.Confirm(fmt.Sprintf("Permanently delete %d realm(s)? This cannot be undone.", len(selected)))
-		if err != nil {
-			return err
-		}
-		if !ok {
-			fmt.Println("Aborted.")
-			return nil
-		}
-
-		for _, name := range selected {
-			if err := client.DeleteRealm(name); err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to delete realm '%s': %v\n", name, err)
-				continue
-			}
-			fmt.Printf("Deleted realm: %s\n", name)
-		}
-		return nil
+		return runDeleteInteractive(client)
 	},
+}
+
+func runDeleteNonInteractive(client *api.Client, names []string) error {
+	for _, name := range names {
+		if name == "master" {
+			fmt.Fprintf(os.Stderr, "Refusing to delete the 'master' realm.\n")
+			continue
+		}
+		if err := client.DeleteRealm(name); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to delete realm '%s': %v\n", name, err)
+			continue
+		}
+		fmt.Printf("Deleted realm: %s\n", name)
+	}
+	return nil
+}
+
+func runDeleteInteractive(client *api.Client) error {
+	realms, err := client.GetRealms()
+	if err != nil {
+		return err
+	}
+
+	var options []huh.Option[string]
+	for _, r := range realms {
+		if r.Realm == "master" {
+			continue
+		}
+		label := r.Realm
+		if !r.Enabled {
+			label += " [disabled]"
+		}
+		options = append(options, huh.NewOption(label, r.Realm))
+	}
+	if len(options) == 0 {
+		fmt.Println("No deletable realms found.")
+		return nil
+	}
+
+	selected, err := tui.MultiSelect("Select realms to delete:", options)
+	if err != nil {
+		return err
+	}
+	if len(selected) == 0 {
+		fmt.Println("No realms selected.")
+		return nil
+	}
+
+	ok, err := tui.Confirm(fmt.Sprintf("Permanently delete %d realm(s)? This cannot be undone.", len(selected)))
+	if err != nil {
+		return err
+	}
+	if !ok {
+		fmt.Println("Aborted.")
+		return nil
+	}
+
+	for _, name := range selected {
+		if err := client.DeleteRealm(name); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to delete realm '%s': %v\n", name, err)
+			continue
+		}
+		fmt.Printf("Deleted realm: %s\n", name)
+	}
+	return nil
 }
 
 // requireClient is injected at registration time to avoid import cycles.
