@@ -71,7 +71,15 @@ func Login(serverURL, username, password, secretHeaderName, secretHeaderValue st
 		RefreshExpiresAt: now.Add(time.Duration(raw.RefreshExpiresIn) * time.Second),
 	}
 
-	cfg := &config.Config{ServerURL: serverURL, AdminSecretHeaderName: secretHeaderName, AdminSecretHeaderValue: secretHeaderValue}
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		cfg = &config.Config{}
+	}
+	cfg.ServerURL = serverURL
+	cfg.Username = username
+	cfg.Password = password
+	cfg.AdminSecretHeaderName = secretHeaderName
+	cfg.AdminSecretHeaderValue = secretHeaderValue
 	if err := config.SaveConfig(cfg); err != nil {
 		return err
 	}
