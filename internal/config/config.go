@@ -9,8 +9,8 @@ import (
 
 type Config struct {
 	ServerURL              string `json:"server_url"`
-	Username               string `json:"username,omitempty"`
-	Password               string `json:"password,omitempty"`
+	Username               string `json:"admin_username,omitempty"`
+	Password               string `json:"admin_password,omitempty"`
 	AdminSecretHeaderName  string `json:"admin_secret_header_name,omitempty"`
 	AdminSecretHeaderValue string `json:"admin_secret_header_value,omitempty"`
 }
