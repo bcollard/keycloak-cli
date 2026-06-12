@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/bcollard/keycloak-cli/internal/api"
+	"github.com/bcollard/keycloak-cli/internal/cliutil"
 	"github.com/bcollard/keycloak-cli/internal/tui"
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -42,17 +43,23 @@ var (
 func init() {
 	Cmd.PersistentFlags().StringVarP(&realmFlag, "realm", "r", "", "Realm name (overrides REALM_NAME env var)")
 
-	createCmd.Flags().StringVar(&createName, "name", "", "Group name (enables non-interactive mode)")
+	createCmd.Flags().StringVar(&createName, "name", "", "Group name (alias: --group; enables non-interactive mode)")
 	createCmd.Flags().StringVar(&createParent, "parent", "", "Parent group name or path (creates as a subgroup)")
 	createCmd.Flags().StringVar(&createParentID, "parent-id", "", "Parent group UUID (creates as a subgroup)")
+	createCmd.Flags().SetNormalizeFunc(cliutil.AliasNormalizer(map[string]string{"group": "name"}))
 
-	deleteCmd.Flags().StringArrayVar(&deleteNames, "name", nil, "Group name or path to delete (repeatable; enables non-interactive mode)")
+	deleteCmd.Flags().StringArrayVar(&deleteNames, "name", nil, "Group name or path to delete (alias: --group; repeatable; enables non-interactive mode)")
 	deleteCmd.Flags().StringArrayVar(&deleteGroupIDs, "group-id", nil, "Group UUID to delete (repeatable; enables non-interactive mode)")
+	deleteCmd.Flags().SetNormalizeFunc(cliutil.AliasNormalizer(map[string]string{"group": "name"}))
 
-	addMemberCmd.Flags().StringArrayVar(&addMemberUsernames, "user", nil, "Username to add (repeatable; enables non-interactive mode)")
+	addMemberCmd.Flags().StringArrayVar(&addMemberUsernames, "username", nil, "Username to add (alias: --user; repeatable; enables non-interactive mode)")
 	addMemberCmd.Flags().StringArrayVar(&addMemberUserIDs, "user-id", nil, "User UUID to add (repeatable; enables non-interactive mode)")
-	addMemberCmd.Flags().StringArrayVar(&addMemberGroups, "group", nil, "Group name or path to add to (repeatable; enables non-interactive mode)")
+	addMemberCmd.Flags().StringArrayVar(&addMemberGroups, "group", nil, "Group name or path to add to (alias: --name; repeatable; enables non-interactive mode)")
 	addMemberCmd.Flags().StringArrayVar(&addMemberGroupIDs, "group-id", nil, "Group UUID to add to (repeatable; enables non-interactive mode)")
+	addMemberCmd.Flags().SetNormalizeFunc(cliutil.AliasNormalizer(map[string]string{
+		"user": "username",
+		"name": "group",
+	}))
 
 	Cmd.AddCommand(listCmd, createCmd, deleteCmd, addMemberCmd)
 }

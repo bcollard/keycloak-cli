@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/bcollard/keycloak-cli/internal/api"
+	"github.com/bcollard/keycloak-cli/internal/cliutil"
 	"github.com/bcollard/keycloak-cli/internal/tui"
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -45,14 +46,19 @@ var (
 func init() {
 	Cmd.PersistentFlags().StringVarP(&realmFlag, "realm", "r", "", "Realm name (overrides REALM_NAME env var)")
 
-	createCmd.Flags().StringVar(&createName, "name", "", "Scope name (enables non-interactive mode)")
+	createCmd.Flags().StringVar(&createName, "name", "", "Scope name (alias: --scope; enables non-interactive mode)")
 	createCmd.Flags().StringVar(&createDescription, "description", "", "Scope description")
 	createCmd.Flags().StringVar(&createProtocol, "protocol", "openid-connect", "Protocol (openid-connect | saml)")
 	createCmd.Flags().BoolVar(&createIncludeInTokenScope, "include-in-token-scope", true, "Set include.in.token.scope attribute")
+	createCmd.Flags().SetNormalizeFunc(cliutil.AliasNormalizer(map[string]string{"scope": "name"}))
 
-	addCmd.Flags().StringVar(&addClient, "client", "", "Client clientId (enables non-interactive mode)")
-	addCmd.Flags().StringVar(&addScope, "scope", "", "Client-scope name")
+	addCmd.Flags().StringVar(&addClient, "client-id", "", "Client clientId (alias: --client; enables non-interactive mode)")
+	addCmd.Flags().StringVar(&addScope, "scope", "", "Client-scope name (alias: --name)")
 	addCmd.Flags().StringVar(&addType, "type", "default", "Scope type: default | optional")
+	addCmd.Flags().SetNormalizeFunc(cliutil.AliasNormalizer(map[string]string{
+		"client": "client-id",
+		"name":   "scope",
+	}))
 
 	addMapperCmd.Flags().StringVar(&mapperScope, "scope", "", "Client-scope name or UUID (required)")
 	addMapperCmd.Flags().StringVar(&mapperName, "name", "", "Protocol-mapper instance name (required)")

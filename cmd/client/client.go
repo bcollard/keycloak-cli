@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/bcollard/keycloak-cli/internal/api"
+	"github.com/bcollard/keycloak-cli/internal/cliutil"
 	"github.com/bcollard/keycloak-cli/internal/tui"
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -42,7 +43,7 @@ var (
 func init() {
 	Cmd.PersistentFlags().StringVarP(&realmFlag, "realm", "r", "", "Realm name (overrides REALM_NAME env var)")
 
-	createCmd.Flags().StringVar(&createClientID, "client-id", "", "Client ID (enables non-interactive mode)")
+	createCmd.Flags().StringVar(&createClientID, "client-id", "", "Client ID (alias: --client; enables non-interactive mode)")
 	createCmd.Flags().StringVar(&createName, "name", "", "Client display name (defaults to client-id)")
 	createCmd.Flags().StringVar(&createSecret, "secret", "", "Fixed client secret (confidential clients)")
 	createCmd.Flags().BoolVar(&createPublic, "public", false, "Public client (no secret)")
@@ -56,7 +57,10 @@ func init() {
 	createCmd.Flags().StringArrayVar(&createAttributes, "attribute", nil, "Extra attribute key=value (repeatable)")
 	createCmd.Flags().BoolVar(&createDisabled, "disabled", false, "Create the client disabled")
 
-	deleteCmd.Flags().StringArrayVar(&deleteClientIDs, "client-id", nil, "Client clientId to delete (repeatable; enables non-interactive mode)")
+	deleteCmd.Flags().StringArrayVar(&deleteClientIDs, "client-id", nil, "Client clientId to delete (alias: --client; repeatable; enables non-interactive mode)")
+
+	createCmd.Flags().SetNormalizeFunc(cliutil.AliasNormalizer(map[string]string{"client": "client-id"}))
+	deleteCmd.Flags().SetNormalizeFunc(cliutil.AliasNormalizer(map[string]string{"client": "client-id"}))
 
 	Cmd.AddCommand(listCmd, createCmd, deleteCmd)
 }

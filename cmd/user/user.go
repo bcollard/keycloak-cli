@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/bcollard/keycloak-cli/internal/api"
+	"github.com/bcollard/keycloak-cli/internal/cliutil"
 	"github.com/bcollard/keycloak-cli/internal/tui"
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -32,8 +33,9 @@ var (
 	createGroups         []string
 )
 
-// set-password flags
+// set-password flags (non-interactive when a user selector is set)
 var (
+	setPwdUsername  string
 	setPwdUserID    string
 	setPwdPassword  string
 	setPwdTemporary bool
@@ -48,22 +50,32 @@ var (
 func init() {
 	Cmd.PersistentFlags().StringVarP(&realmFlag, "realm", "r", "", "Realm name (overrides REALM_NAME env var)")
 
-	createCmd.Flags().StringVar(&createUsername, "username", "", "Username (enables non-interactive mode)")
+	createCmd.Flags().StringVar(&createUsername, "username", "", "Username (alias: --user; enables non-interactive mode)")
 	createCmd.Flags().StringVar(&createEmail, "email", "", "Email address")
 	createCmd.Flags().StringVar(&createFirstName, "first-name", "", "First name")
 	createCmd.Flags().StringVar(&createLastName, "last-name", "", "Last name")
 	createCmd.Flags().BoolVar(&createEmailVerified, "email-verified", false, "Mark email as verified")
 	createCmd.Flags().BoolVar(&createDisabled, "disabled", false, "Create the user disabled")
 	createCmd.Flags().StringVar(&createPassword, "password", "", "Initial password (omit to skip)")
-	createCmd.Flags().BoolVar(&createTempPassword, "temporary-password", false, "Mark password as temporary")
+	createCmd.Flags().BoolVar(&createTempPassword, "temporary", false, "Mark password as temporary (user must change on first login)")
 	createCmd.Flags().StringArrayVar(&createGroups, "group", nil, "Group name to assign user to (repeatable)")
+	createCmd.Flags().SetNormalizeFunc(cliutil.AliasNormalizer(map[string]string{
+		"user":               "username",
+		"temporary-password": "temporary",
+	}))
 
-	setPasswordCmd.Flags().StringVar(&setPwdUserID, "user-id", "", "User UUID (alternative to positional username)")
-	setPasswordCmd.Flags().StringVar(&setPwdPassword, "password", "", "New password (required)")
+	setPasswordCmd.Flags().StringVar(&setPwdUsername, "username", "", "Username (alias: --user; alternative to the positional arg)")
+	setPasswordCmd.Flags().StringVar(&setPwdUserID, "user-id", "", "User UUID (alternative to username)")
+	setPasswordCmd.Flags().StringVar(&setPwdPassword, "password", "", "New password (prompted if omitted)")
 	setPasswordCmd.Flags().BoolVar(&setPwdTemporary, "temporary", false, "Mark password as temporary (user must change on first login)")
+	setPasswordCmd.Flags().SetNormalizeFunc(cliutil.AliasNormalizer(map[string]string{
+		"user":               "username",
+		"temporary-password": "temporary",
+	}))
 
-	deleteCmd.Flags().StringArrayVar(&deleteUsernames, "username", nil, "Username to delete (repeatable; enables non-interactive mode)")
+	deleteCmd.Flags().StringArrayVar(&deleteUsernames, "username", nil, "Username to delete (alias: --user; repeatable; enables non-interactive mode)")
 	deleteCmd.Flags().StringArrayVar(&deleteUserIDs, "user-id", nil, "User UUID to delete (repeatable; enables non-interactive mode)")
+	deleteCmd.Flags().SetNormalizeFunc(cliutil.AliasNormalizer(map[string]string{"user": "username"}))
 
 	Cmd.AddCommand(listCmd, createCmd, deleteCmd, setPasswordCmd)
 }
@@ -339,7 +351,7 @@ func runDeleteInteractive(client *api.Client, realm string) error {
 
 var setPasswordCmd = &cobra.Command{
 	Use:   "set-password [username]",
-	Short: "Set or reset a user's password",
+	Short: "Set or reset a user's password (interactive or via flags)",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client, err := requireClient()
@@ -351,30 +363,77 @@ var setPasswordCmd = &cobra.Command{
 			return err
 		}
 
-		if setPwdPassword == "" {
-			return fmt.Errorf("--password is required")
+		// Resolve the target user. The username may come from the positional
+		// argument, --username/--user, or --user-id; fall back to a picker.
+		username := setPwdUsername
+		if username == "" && len(args) == 1 {
+			username = args[0]
 		}
 
 		var userID string
 		switch {
 		case setPwdUserID != "":
 			userID = setPwdUserID
-		case len(args) == 1:
-			u, err := client.FindUserByUsername(realm, args[0])
+		case username != "":
+			u, err := client.FindUserByUsername(realm, username)
 			if err != nil {
 				return err
 			}
 			userID = u.ID
 		default:
-			return fmt.Errorf("provide a username as the positional argument or --user-id")
+			userID, err = pickUser(client, realm)
+			if err != nil {
+				return err
+			}
+			if userID == "" {
+				return nil
+			}
 		}
 
-		if err := client.SetUserPassword(realm, userID, setPwdPassword, setPwdTemporary); err != nil {
+		// Resolve the password, prompting if it was not supplied.
+		password := setPwdPassword
+		temporary := setPwdTemporary
+		if password == "" {
+			password, err = tui.Password("New password")
+			if err != nil {
+				return err
+			}
+			if !cmd.Flags().Changed("temporary") {
+				temporary, err = tui.Confirm("Temporary password (user must change on first login)?")
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		if err := client.SetUserPassword(realm, userID, password, temporary); err != nil {
 			return err
 		}
 		fmt.Println("Password set.")
 		return nil
 	},
+}
+
+// pickUser presents an interactive single-select of realm users and returns the
+// chosen user's ID, or "" if there are none / the selection was empty.
+func pickUser(client *api.Client, realm string) (string, error) {
+	users, err := client.GetUsers(realm)
+	if err != nil {
+		return "", err
+	}
+	if len(users) == 0 {
+		fmt.Println("No users found.")
+		return "", nil
+	}
+	var options []huh.Option[string]
+	for _, u := range users {
+		label := u.Username
+		if u.Email != "" {
+			label += "  (" + u.Email + ")"
+		}
+		options = append(options, huh.NewOption(label, u.ID))
+	}
+	return tui.Select("Select a user:", options)
 }
 
 var requireClient func() (*api.Client, error)

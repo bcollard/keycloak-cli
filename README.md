@@ -127,8 +127,12 @@ All user commands support `-r`/`--realm` (flag → `REALM_NAME` env var → stor
 kc user list        # lists users enriched with their group memberships
 kc user create      # interactive: username, email, name, password, group assignment
 kc user delete      # interactive multi-select + confirmation
-kc user set-password <username> --password <p> [--temporary]
+kc user set-password [username]   # interactive picker + password prompt when no flags given
 ```
+
+> User-identifier flags are interchangeable across `user`/`group` commands: `--username`
+> and `--user` are accepted everywhere a username is taken, and `--temporary` /
+> `--temporary-password` are equivalent.
 
 ```bash
 kc user list -r myrealm
@@ -151,10 +155,13 @@ kc user delete -r myrealm --username alex --username sam
 kc user delete -r myrealm --user-id 7f8e...
 ```
 
-Set-password by username (default) or UUID:
+Set-password by positional username, `--username`/`--user`, or `--user-id`. The
+password is prompted for if `--password` is omitted; with no selector at all an
+interactive user picker is shown:
 
 ```bash
 kc user set-password alex --password doe
+kc user set-password --username alex --password doe --temporary
 kc user set-password --user-id 7f8e... --password doe --temporary
 ```
 
@@ -265,10 +272,13 @@ kc client-scope add-mapper -r myrealm \
 
 # 3. attach the scope as optional to a client
 kc client-scope add -r myrealm \
-  --client client-a \
+  --client-id client-a \
   --scope add-client-b-as-audience \
   --type optional
 ```
+
+> `--client-id` and `--client` are interchangeable on `client` / `client-scope`
+> commands, as are `--scope` and `--name` for the scope name.
 
 
 ## Configuration
